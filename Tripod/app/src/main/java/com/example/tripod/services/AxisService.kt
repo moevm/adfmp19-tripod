@@ -2,11 +2,16 @@ package com.example.tripod.services
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
-import android.widget.TextView
 import android.hardware.SensorManager
+import android.view.View
+import android.widget.FrameLayout
+import com.example.tripod.R
+
 
 class AxisService(activity: Activity) : SensorEventListener {
     val ALPHA = 0.2f
@@ -19,12 +24,53 @@ class AxisService(activity: Activity) : SensorEventListener {
     private var magnetData: FloatArray = FloatArray(3)       //Данные геомагнитного датчика
     private val orientationData: FloatArray = FloatArray(3) //Матрица положения в пространстве
 
-    private val xyView: TextView = activity.findViewById(com.example.tripod.R.id.xyValue)
-    private val xzView: TextView = activity.findViewById(com.example.tripod.R.id.xzValue)
-    private val zyView: TextView = activity.findViewById(com.example.tripod.R.id.zyValue)
+
+    var layout1 = activity.findViewById(R.id.frameLayout) as FrameLayout
+    var canvass = Canvass(activity)
+
+    init {
+
+        layout1.addView(canvass)
+
+    }
+
+    fun getOrientationData():FloatArray {
+        return orientationData
+    }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    class Canvass(context: Context) : View(context) {
+
+        var yStart = 0f
+        var yFinish = 0f
+
+        var angle = 0
+
+        fun onSensorChanged(xy: Float,xz: Float,zy: Float){
+
+            angle = xz.toInt()
+
+            if(xy>0 && zy>0) angle =  90 - Math.abs(angle)
+            if(xy<0 && zy<0) angle =  -(90 - Math.abs(angle))
+
+            this.yStart = (height/2).toFloat() + (height/2)*(angle.toFloat()/90)
+            this.yFinish = (height/2).toFloat() - (height/2)*(angle.toFloat()/90)
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val width = getWidth()
+            val height = getHeight()
+            val paint = Paint()
+            paint.setStrokeWidth(4f)
+
+            canvas.drawLine(0f, (height/2).toFloat(), width.toFloat(), (height/2).toFloat(), paint)
+
+            canvas.drawLine(0f,yStart , width.toFloat(), yFinish, paint)
+            invalidate()
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -40,10 +86,9 @@ class AxisService(activity: Activity) : SensorEventListener {
             orientationData
         ) //Получаем данные ориентации устройства в пространстве
 
-        //Выводим результат
-        xyView.text = Math.round(Math.toDegrees(orientationData[0].toDouble())).toString()
-        xzView.text = Math.round(Math.toDegrees(orientationData[1].toDouble())).toString()
-        zyView.text = Math.round(Math.toDegrees(orientationData[2].toDouble())).toString()
+
+        canvass.onSensorChanged(Math.toDegrees(orientationData[0].toDouble()).toFloat(), Math.toDegrees(orientationData[1].toDouble()).toFloat(),Math.toDegrees(orientationData[2].toDouble()).toFloat())
+
     }
 
     fun onResume() {

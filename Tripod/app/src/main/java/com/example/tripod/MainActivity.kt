@@ -30,11 +30,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fotoapparat: Fotoapparat
     private lateinit var cameraZoom: Zoom.VariableZoom
 
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         axisService = AxisService(this)
+
 
         permissionsGranted = permissionsDelegate.hasCameraPermission()
 
@@ -58,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         switchCamera onClick changeCamera()
         torchSwitch onCheckedChanged toggleFlash()
     }
+
 
     private fun takePicture(): () -> Unit = {
         val photoResult = fotoapparat
@@ -230,4 +234,6 @@ private sealed class Camera(
                     )
             )
     )
+
+
 }
