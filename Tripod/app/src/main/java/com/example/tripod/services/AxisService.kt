@@ -1,7 +1,7 @@
 package com.example.tripod.services
 
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -10,29 +10,35 @@ import android.widget.FrameLayout
 import com.example.tripod.CustomCanvas
 import com.example.tripod.R
 
-class AxisService(activity: Activity) : SensorEventListener {
-    val ALPHA = 0.1f
-    private val SENSOR_DELAY = 50 * 1000 // 500ms
+class AxisService(private val activity: Activity) : SensorEventListener {
+    private var mSensorManager: SensorManager? = null
+    private var mRotationSensor: Sensor? = null
 
-    private val sensorManager: SensorManager =
-        activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager //Менеджер сенсоров аппрата
+    private var orientation: FloatArray = FloatArray(3)
+    private var pitch: Float = 0f
+    private var roll: Float = 0f
 
-    private val rotationMatrix: FloatArray = FloatArray(16)   //Матрица поворота
-    private var accelerometerData: FloatArray = FloatArray(3)           //Данные с акселерометра
-    private var magnetData: FloatArray = FloatArray(3)       //Данные геомагнитного датчика
-    private val orientationData: FloatArray = FloatArray(3) //Матрица положения в пространстве
+    private val SENSOR_DELAY = 500 * 1000 // 500ms
+    private val FROM_RADS_TO_DEGS = -57
+    private val ALPHA = 0.1f
 
     var layout1 = activity.findViewById(R.id.frameLayout) as FrameLayout
     var canvass = CustomCanvas(activity)
 
     init {
-
         layout1.addView(canvass)
-
+        try {
+            mSensorManager = activity.getSystemService(Activity.SENSOR_SERVICE) as SensorManager
+            mRotationSensor = mSensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            mSensorManager?.registerListener(this, mRotationSensor, SENSOR_DELAY)
+        } catch (e: Exception) {
+            // you got a problem
+        }
     }
 
+
     fun getOrientationData(): FloatArray {
-        return orientationData
+        return orientation
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
@@ -40,52 +46,44 @@ class AxisService(activity: Activity) : SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        loadNewSensorData(event) // Получаем данные с датчика
-        SensorManager.getRotationMatrix(
-            rotationMatrix,
-            null,
-            accelerometerData,
-            magnetData
-        ) //Получаем матрицу поворота
-        SensorManager.getOrientation(
-            rotationMatrix,
-            orientationData
-        ) //Получаем данные ориентации устройства в пространстве
+        if (event.sensor === mRotationSensor) {
+            if (event.values.size > 4) {
+                val truncatedRotationVector = FloatArray(4)
+                System.arraycopy(event.values, 0, truncatedRotationVector, 0, 4)
+                update(truncatedRotationVector)
+            } else {
+                update(event.values)
+            }
+        }
 
         canvass.onSensorChanged(
-            Math.toDegrees(orientationData[0].toDouble()).toFloat(),
-            Math.toDegrees(orientationData[1].toDouble()).toFloat(),
-            Math.toDegrees(orientationData[2].toDouble()).toFloat(),
-            rotationMatrix
+            roll
         )
     }
 
+    @SuppressLint("SetTextI18n")
+    private fun update(vectors: FloatArray) {
+        val rotationMatrix = FloatArray(9)
+        SensorManager.getRotationMatrixFromVector(rotationMatrix, vectors)
+        val worldAxisX = SensorManager.AXIS_X
+        val worldAxisZ = SensorManager.AXIS_Z
+        val adjustedRotationMatrix = FloatArray(9)
+        SensorManager.remapCoordinateSystem(rotationMatrix, worldAxisX, worldAxisZ, adjustedRotationMatrix)
+        SensorManager.getOrientation(adjustedRotationMatrix, orientation)
+        pitch = orientation[1] * FROM_RADS_TO_DEGS
+        roll = orientation[2] * FROM_RADS_TO_DEGS
+    }
+
     fun onResume() {
-        sensorManager.registerListener(
+        mSensorManager?.registerListener(
             this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
-            SENSOR_DELAY
-        )
-        sensorManager.registerListener(
-            this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD),
+            mRotationSensor,
             SENSOR_DELAY
         )
     }
 
     fun onPause() {
-        sensorManager.unregisterListener(this)
-    }
-
-    private fun loadNewSensorData(event: SensorEvent) {
-        val type = event.sensor.type //Определяем тип датчика
-        if (type == Sensor.TYPE_ACCELEROMETER) { //Если акселерометр
-            accelerometerData = lowPass(event.values.clone(), accelerometerData)
-        }
-
-        if (type == Sensor.TYPE_MAGNETIC_FIELD) { //Если геомагнитный датчик
-            magnetData = lowPass(event.values.clone(), magnetData)
-        }
+        mSensorManager?.unregisterListener(this)
     }
 
     /**
