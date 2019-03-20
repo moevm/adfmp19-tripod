@@ -1,167 +1,89 @@
 package com.example.tripod.services
 
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.util.Log
-import android.view.View
 import android.widget.FrameLayout
+import com.example.tripod.CustomCanvas
 import com.example.tripod.R
-import androidx.core.graphics.rotationMatrix
 
+class AxisService(private val activity: Activity) : SensorEventListener {
+    private var mSensorManager: SensorManager? = null
+    private var mRotationSensor: Sensor? = null
 
-class AxisService(activity: Activity) : SensorEventListener {
-    val ALPHA = 0.2f
+    private var orientation: FloatArray = FloatArray(3)
+    private var pitch: Float = 0f
+    private var roll: Float = 0f
 
-    private val sensorManager: SensorManager =
-        activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager //Менеджер сенсоров аппрата
-
-    private val rotationMatrix: FloatArray = FloatArray(16)   //Матрица поворота
-    private var accelerometerData: FloatArray = FloatArray(3)           //Данные с акселерометра
-    private var magnetData: FloatArray = FloatArray(3)       //Данные геомагнитного датчика
-    private val orientationData: FloatArray = FloatArray(3) //Матрица положения в пространстве
-
+    private val SENSOR_DELAY = 500 * 1000 // 500ms
+    private val FROM_RADS_TO_DEGS = -57
+    private val ALPHA = 0.1f
 
     var layout1 = activity.findViewById(R.id.frameLayout) as FrameLayout
-    var canvass = Canvass(activity)
+    var canvass = CustomCanvas(activity)
 
     init {
-
         layout1.addView(canvass)
-
+        try {
+            mSensorManager = activity.getSystemService(Activity.SENSOR_SERVICE) as SensorManager
+            mRotationSensor = mSensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            mSensorManager?.registerListener(this, mRotationSensor, SENSOR_DELAY)
+        } catch (e: Exception) {
+            // you got a problem
+        }
     }
 
-    fun getOrientationData():FloatArray {
-        return orientationData
+
+    fun getOrientationData(): FloatArray {
+        return orientation
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    class Canvass(context: Context) : View(context) {
-
-        var yStart = 0f
-        var yFinish = 0f
-
-        var vxStart = 0f
-        var vxFinish = 0f
-        var vyStart = 0f
-        var vyFinish = 0f
-
-        var angle = 0
-
-        fun onSensorChanged(xy: Float,xz: Float,zy: Float, rotationMatrix: FloatArray){
-
-
-            //val azimuth = Math.atan2(-rotationMatrix[6].toDouble(), rotationMatrix[8].toDouble()).toFloat()
-
-            // Log.d("AZI", azimuth.toString());
-
-            angle = xz.toInt()
-
-            if(zy>0) angle =  90 - Math.abs(angle)
-            if(zy<0) angle =  -(90 - Math.abs(angle))
-
-            if(angle < 90){
-                this.yStart = (height/2).toFloat() + (height/2)*(angle.toFloat() / 90)
-                this.yFinish = (height/2).toFloat() - (height/2)*(angle.toFloat() / 90)
-                this.vxStart = (width/2).toFloat() + (width/2)*(angle.toFloat() / 90)
-                this.vxFinish = (width/2).toFloat() - (width/2)*(angle.toFloat() / 90)
-                this.vyStart = yStart + height/2
-                this.vyFinish = yFinish - height/2
-
-
-
+    override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor === mRotationSensor) {
+            if (event.values.size > 4) {
+                val truncatedRotationVector = FloatArray(4)
+                System.arraycopy(event.values, 0, truncatedRotationVector, 0, 4)
+                update(truncatedRotationVector)
             } else {
-                this.yStart = (height/2).toFloat() - (height/2)*(angle.toFloat() / 90)
-                this.yFinish = (height/2).toFloat() + (height/2)*(angle.toFloat() / 90)
-
-                this.vxStart = (width/2).toFloat() - (width/2)*(angle.toFloat() / 90)
-                this.vxFinish = (width/2).toFloat() + (width/2)*(angle.toFloat() / 90)
-                this.vyStart = yStart - height/2
-                this.vyFinish = yFinish + height/2
-
+                update(event.values)
             }
-
-
         }
 
-        override fun onDraw(canvas: Canvas) {
-            val width = getWidth()
-            val height = getHeight()
-            val paint = Paint()
-            paint.setStrokeWidth(4f)
-
-            canvas.drawLine(0f, (height/2).toFloat(), width.toFloat(), (height/2).toFloat(), paint)
-            canvas.drawLine((width/2).toFloat(), (height - 10).toFloat(), (width/2).toFloat(), (10).toFloat(), paint)
-            paint.color = Color.RED
-            paint.setStrokeWidth(6f)
-
-            val dx = width.toFloat() - 0f
-            val dy = yFinish - yStart
-
-            val ox = 0f + (dx - dy) / 2;
-            val oy = yStart + (dx + dy) / 2;
-
-            canvas.drawLine(0f,yStart , width.toFloat(), yFinish, paint)
-            canvas.drawLine( ox, oy, ox+dy, oy-dx, paint)
-            invalidate()
-        }
+        canvass.onSensorChanged(
+            roll
+        )
     }
 
-    override fun onSensorChanged(event: SensorEvent) {
-        loadNewSensorData(event) // Получаем данные с датчика
-        SensorManager.getRotationMatrix(
-            rotationMatrix,
-            null,
-            accelerometerData,
-            magnetData
-        ) //Получаем матрицу поворота
-        SensorManager.getOrientation(
-            rotationMatrix,
-            orientationData
-        ) //Получаем данные ориентации устройства в пространстве
-
-        Log.d("ROT", rotationMatrix[1].toString());
-
-        Log.d("ANG", Math.toDegrees(orientationData[0].toDouble()).toFloat().toString() +" "+ Math.toDegrees(orientationData[1].toDouble()).toFloat().toString() + " " + Math.toDegrees(orientationData[2].toDouble()).toFloat().toString())
-        canvass.onSensorChanged(Math.toDegrees(orientationData[0].toDouble()).toFloat(), Math.toDegrees(orientationData[1].toDouble()).toFloat(),Math.toDegrees(orientationData[2].toDouble()).toFloat(), rotationMatrix)
-
+    @SuppressLint("SetTextI18n")
+    private fun update(vectors: FloatArray) {
+        val rotationMatrix = FloatArray(9)
+        SensorManager.getRotationMatrixFromVector(rotationMatrix, vectors)
+        val worldAxisX = SensorManager.AXIS_X
+        val worldAxisZ = SensorManager.AXIS_Z
+        val adjustedRotationMatrix = FloatArray(9)
+        SensorManager.remapCoordinateSystem(rotationMatrix, worldAxisX, worldAxisZ, adjustedRotationMatrix)
+        SensorManager.getOrientation(adjustedRotationMatrix, orientation)
+        pitch = orientation[1] * FROM_RADS_TO_DEGS
+        roll = orientation[2] * FROM_RADS_TO_DEGS
     }
 
     fun onResume() {
-        sensorManager.registerListener(
+        mSensorManager?.registerListener(
             this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
-            SensorManager.SENSOR_DELAY_UI
-        )
-        sensorManager.registerListener(
-            this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD),
-            SensorManager.SENSOR_DELAY_UI
+            mRotationSensor,
+            SENSOR_DELAY
         )
     }
 
     fun onPause() {
-        sensorManager.unregisterListener(this)
-    }
-
-    private fun loadNewSensorData(event: SensorEvent) {
-        val type = event.sensor.type //Определяем тип датчика
-        if (type == Sensor.TYPE_ACCELEROMETER) { //Если акселерометр
-            accelerometerData = lowPass(event.values.clone(), accelerometerData)
-        }
-
-        if (type == Sensor.TYPE_MAGNETIC_FIELD) { //Если геомагнитный датчик
-            magnetData = lowPass(event.values.clone(), magnetData)
-        }
+        mSensorManager?.unregisterListener(this)
     }
 
     /**
