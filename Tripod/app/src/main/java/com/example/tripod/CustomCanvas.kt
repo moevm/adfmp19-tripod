@@ -21,12 +21,8 @@ class CustomCanvas(context: Context) : View(context) {
 
     var angle = 0
 
-    fun onSensorChanged(xy: Float, xz: Float, zy: Float, rotationMatrix: FloatArray) {
-
-        angle = xz.toInt()
-
-        if (zy >= 0) angle = 90 - Math.abs(angle)
-        if (zy < 0) angle = -(90 - Math.abs(angle))
+    fun onSensorChanged(roll: Float) {
+        angle = -roll.toInt()
 
         if (angle < 90) {
             this.yStart = (height / 2).toFloat() + (height / 2) * (angle.toFloat() / 90)
@@ -65,7 +61,7 @@ class CustomCanvas(context: Context) : View(context) {
             (10).toFloat(),
             staticPaint
         )
-        dynamicPaint.color = Color.RED
+        dynamicPaint.color = if (angle != 0) Color.RED else Color.GREEN
         dynamicPaint.strokeWidth = 6f
 
         val dx = width.toFloat() - 0f
